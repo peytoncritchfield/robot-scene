@@ -9,6 +9,9 @@ import tubeFloorVertexShader from './shaders/tubeFloor/vertex.glsl'
 import tubeFloorFragmentShader from './shaders/tubeFloor/fragment.glsl'
 import robotVertexShader from './shaders/robot/vertex.glsl'
 import robotFragmentShader from './shaders/robot/fragment.glsl'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 
 
 /**
@@ -47,7 +50,6 @@ for (var i = 0; i < vertices.line2.length; i++) {
 const firstZLine1 = vertices.line1[0][2];
 const lastZLine1 = vertices.line1[vertices.line1.length - 1][2];
 let lineLength = lastZLine1 - firstZLine1;
-console.log(lineLength)
 
 const tubeFloorMaterial = new THREE.ShaderMaterial({
     vertexShader: tubeFloorVertexShader,
@@ -65,10 +67,13 @@ const tubeFloorMaterial = new THREE.ShaderMaterial({
 const tubeGeometry1 = new THREE.TubeGeometry( new THREE.CatmullRomCurve3(line1), 100, 0.05, 8, true );
 const tubeMesh1 = new THREE.Mesh( tubeGeometry1, tubeFloorMaterial );
 scene.add( tubeMesh1 );
+tubeMesh1.layers.enable(0);
 
 const tubeGeometry2 = new THREE.TubeGeometry( new THREE.CatmullRomCurve3(line2), 100, 0.05, 8, true );
 const tubeMesh2 = new THREE.Mesh( tubeGeometry2, tubeFloorMaterial );
 scene.add( tubeMesh2 );
+tubeMesh2.layers.enable(0);
+
 
 const robotMaterial = new THREE.ShaderMaterial({
     vertexShader: robotVertexShader,
@@ -117,6 +122,8 @@ gltfLoader.load(
     {
         console.log(gltf)
 
+        
+
         gltf.scene.traverse((child) =>
         {
             child.material = bakedMaterial
@@ -128,7 +135,19 @@ gltfLoader.load(
 
         robotMaterial.uniforms.uAdjustmentY.value = robot.position.y
 
+        for (let i = 0; i < gltf.scene.children.length; i++)
+        {
+            if (i !== 11) {
+                gltf.scene.children[i].layers.enable(0)
+            } else {
+                gltf.scene.children[i].layers.enable(1)
+            }
+        }
+
+
+
         scene.add(gltf.scene)
+
     }
 )
 
@@ -140,6 +159,51 @@ const sizes = {
     height: window.innerHeight
 }
 
+
+/**
+ * Renderer
+ */
+const renderer = new THREE.WebGLRenderer({
+    canvas: canvas,
+    antialias: true
+})
+renderer.setSize(sizes.width, sizes.height)
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+renderer.autoClear = false
+renderer.outputEncoding = THREE.sRGBEncoding
+
+
+// render target
+let RenderTargetClass = null
+
+if (renderer.getPixelRatio() === 1 && renderer.capabilities.isWebGL2)
+{
+    RenderTargetClass = THREE.WebGLMultisampleRenderTarget
+    console.log("Multi")
+}
+else
+{
+    RenderTargetClass = THREE.WebGLRenderTarget
+    console.log("Not Multi")
+}
+const renderTarget = new THREE.WebGLRenderTarget(
+    800,
+    600,
+    {
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat,
+        encoding: THREE.sRGBEncoding
+    }
+)
+
+// composer
+const composer = new EffectComposer( renderer, renderTarget )
+composer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+composer.setSize(sizes.width, sizes.height)
+
+
+// event listener
 window.addEventListener('resize', () =>
 {
     // Update sizes
@@ -168,23 +232,25 @@ window.addEventListener("scroll", function () {
  */
 // Base camera
 const camera = new THREE.PerspectiveCamera(45, sizes.width / sizes.height, 0.1, 1000)
-camera.position.set(50.25383781964611, 25.86425160640591, 59.24067475534197)
+camera.position.set(50.25383781964611, 15.86425160640591, 30.24067475534197)
 scene.add(camera)
 
 // Controls
 const controls = new OrbitControls(camera, canvas)
 controls.enableDamping = true
 
-/**
- * Renderer
- */
-const renderer = new THREE.WebGLRenderer({
-    canvas: canvas,
-    antialias: true
-})
-renderer.setSize(sizes.width, sizes.height)
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-renderer.outputEncoding = THREE.sRGBEncoding
+
+// render pass
+const renderScene = new RenderPass(scene, camera)
+composer.addPass( renderScene )
+
+
+// bloom pass
+const unrealBloomPass = new UnrealBloomPass()
+unrealBloomPass.strength = 1
+unrealBloomPass.radius = 0.1
+unrealBloomPass.threshold = 0
+composer.addPass( unrealBloomPass )
 
 
 /**
@@ -206,8 +272,17 @@ const tick = () =>
     // Update controls
     controls.update()
 
+    
     // Render
+    camera.layers.set(1);
+    
+    composer.render();
+
+    renderer.clearDepth();
+    camera.layers.set(0);
+
     renderer.render(scene, camera)
+
 
     // Call tick again on the next frame
     window.requestAnimationFrame(tick)

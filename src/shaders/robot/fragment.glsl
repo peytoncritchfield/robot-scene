@@ -9,8 +9,8 @@ void main()
 {
     float manipulation = (-vModelPosition.y - uLineLength + uAdjustmentY + uReactiveLength);
 
-    vec3 colorStart = vec3(0.5, 0.2, 0.0);
-    vec3 colorEnd = vec3(0.7, 0.8, 0.2);
+    vec3 colorStart = vec3(0.0, 0.0, 0.0);
+    vec3 colorEnd = vec3(0.7, 0.0, 0.0);
 
 
     float r = clamp(manipulation, colorStart.r, colorEnd.r);
